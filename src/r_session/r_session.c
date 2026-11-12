@@ -1127,8 +1127,8 @@ encodePacket(RSession self, uint8_t payloadType, uint8_t* buffer, int bufPos, RS
         /* APPID */
         bufPos = encodeUInt16FixedSize(element->appId, buffer, bufPos);
 
-        /* APDU length */
-        bufPos = encodeUInt16FixedSize(element->payloadSize + 2, buffer, bufPos);
+        /* APDU length: the octets of the APDU that follow */
+        bufPos = encodeUInt16FixedSize(element->payloadSize, buffer, bufPos);
 
         /* copy user payload */
         memcpy(buffer + bufPos, element->payload, element->payloadSize);
