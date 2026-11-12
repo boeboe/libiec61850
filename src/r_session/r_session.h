@@ -108,6 +108,19 @@ LIB61850_API RSessionError
 RSession_setSecurity(RSession self, RSecurityAlgorithm secAlgo, RSignatureAlgorithm sigAlgo);
 
 /**
+ * \brief Set the session protocol version of the SPDUs the session instance sends
+ *
+ * The default is 2. Received SPDUs of both versions are accepted. Version 1
+ * carries the algorithms of \ref RSession_setSecurity on the wire.
+ *
+ * \param version 1 or 2
+ *
+ * \return R_SESSION_ERROR_OK, or R_SESSION_ERROR_SET_FAILED for another version
+ */
+LIB61850_API RSessionError
+RSession_setProtocolVersion(RSession self, int version);
+
+/**
  * \brief Bind the RSession instance to a specific local IP address and UDP port
  * 
  * \param self the RSession instance
