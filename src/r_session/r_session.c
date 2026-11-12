@@ -1147,7 +1147,7 @@ encodePacket(RSession self, uint8_t payloadType, uint8_t* buffer, int bufPos, RS
         if (self->sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_256)
         {
             buffer[bufPos++] = 0x85;
-            buffer[bufPos++] = 16;
+            buffer[bufPos++] = 32;
 
             RSessionCrypto_createHMAC(buffer + startPos, signatureCoveredLength, self->currentKey, self->currentKeySize, buffer + bufPos, 32);
 
