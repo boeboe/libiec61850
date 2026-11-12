@@ -57,6 +57,11 @@ struct sUdpSocket
 {
     int fd;
     int namespace; /* IPv4: AF_INET; IPv6: AF_INET6 */
+
+    /* last destination of UdpSocket_sendTo, resolved once */
+    char lastAddress[256];
+    int lastPort;
+    struct sockaddr_in lastRemoteAddress;
 };
 
 struct sHandleSet
@@ -713,12 +718,14 @@ UdpSocket_createUsingNamespace(int namespace)
 
     if (sock != -1)
     {
-        self = (UdpSocket)GLOBAL_MALLOC(sizeof(struct sSocket));
+        self = (UdpSocket)GLOBAL_MALLOC(sizeof(struct sUdpSocket));
 
         if (self)
         {
             self->fd = sock;
             self->namespace = namespace;
+            self->lastAddress[0] = 0;
+            self->lastPort = -1;
         }
         else
         {
@@ -860,13 +867,29 @@ UdpSocket_sendTo(UdpSocket self, const char* address, int port, uint8_t* msg, in
     // TODO add support for IPv6
     struct sockaddr_in remoteAddress;
 
-    if (!prepareAddress(address, port, &remoteAddress))
+    /* Resolving the address runs getaddrinfo, which for a host name is a DNS
+     * query. Reuse the result while the destination stays the same. */
+    if (address && (port == self->lastPort) && (strcmp(address, self->lastAddress) == 0))
     {
+        remoteAddress = self->lastRemoteAddress;
+    }
+    else
+    {
+        if (!prepareAddress(address, port, &remoteAddress))
+        {
 
-        if (DEBUG_SOCKET)
-            printf("SOCKET: failed to lookup remote address %s\n", address);
+            if (DEBUG_SOCKET)
+                printf("SOCKET: failed to lookup remote address %s\n", address);
 
-        return false;
+            return false;
+        }
+
+        if (address && (strlen(address) < sizeof(self->lastAddress)))
+        {
+            strcpy(self->lastAddress, address);
+            self->lastPort = port;
+            self->lastRemoteAddress = remoteAddress;
+        }
     }
 
     int result = sendto(self->fd, msg, msgSize, 0, (struct sockaddr*)&remoteAddress, sizeof(remoteAddress));
