@@ -590,7 +590,9 @@ parseSessionMessage(RSession self, uint8_t* buffer, int msgSize, RSessionPayload
                         uint8_t sigLength = buffer[payloadEnd + 1];
                         uint8_t expectedLength = 0;
 
-                        if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_128)
+                        if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_80)
+                            expectedLength = 10;
+                        else if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_128)
                             expectedLength = 16;
                         else if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_256)
                             expectedLength = 32;
@@ -612,21 +614,10 @@ parseSessionMessage(RSession self, uint8_t* buffer, int msgSize, RSessionPayload
                             goto exit_error;
                         }
 
-                        if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_128)
+                        if (memcmp(signatureBuffer, buffer + payloadEnd + 2, expectedLength))
                         {
-                            if (memcmp(signatureBuffer, buffer + payloadEnd + 2, 16))
-                            {
-                                DEBUG_PRINTF("ERROR - signature not matching!");
-                                goto exit_error;
-                            }
-                        }
-                        else if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_256)
-                        {
-                            if (memcmp(signatureBuffer, buffer + payloadEnd + 2, 32))
-                            {
-                                DEBUG_PRINTF("ERROR - signature not matching!");
-                                goto exit_error;
-                            }
+                            DEBUG_PRINTF("ERROR - signature not matching!");
+                            goto exit_error;
                         }
                     }
                 }
@@ -820,7 +811,9 @@ parseSessionMessage(RSession self, uint8_t* buffer, int msgSize, RSessionPayload
                         uint8_t sigLength = buffer[payloadEnd + 1];
                         uint8_t expectedLength = 0;
 
-                        if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_128)
+                        if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_80)
+                            expectedLength = 10;
+                        else if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_128)
                             expectedLength = 16;
                         else if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_256)
                             expectedLength = 32;
@@ -842,21 +835,10 @@ parseSessionMessage(RSession self, uint8_t* buffer, int msgSize, RSessionPayload
                             goto exit_error;
                         }
 
-                        if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_128)
+                        if (memcmp(signatureBuffer, buffer + payloadEnd + 2, expectedLength))
                         {
-                            if (memcmp(signatureBuffer, buffer + payloadEnd + 2, 16))
-                            {
-                                DEBUG_PRINTF("ERROR - signature not matching!");
-                                goto exit_error;
-                            }
-                        }
-                        else if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_256)
-                        {
-                            if (memcmp(signatureBuffer, buffer + payloadEnd + 2, 32))
-                            {
-                                DEBUG_PRINTF("ERROR - signature not matching!");
-                                goto exit_error;
-                            }
+                            DEBUG_PRINTF("ERROR - signature not matching!");
+                            goto exit_error;
                         }
                     }
                 }
@@ -1162,6 +1144,15 @@ encodePacket(RSession self, uint8_t payloadType, uint8_t* buffer, int bufPos, RS
             RSessionCrypto_createHMAC(buffer + startPos, signatureCoveredLength, self->currentKey, self->currentKeySize, buffer + bufPos, 16);
 
             bufPos += 16;
+        }
+        else if (self->sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_80)
+        {
+            buffer[bufPos++] = 0x85;
+            buffer[bufPos++] = 10;
+
+            RSessionCrypto_createHMAC(buffer + startPos, signatureCoveredLength, self->currentKey, self->currentKeySize, buffer + bufPos, 10);
+
+            bufPos += 10;
         }
         else
         {
