@@ -183,6 +183,17 @@ RSession_setSecurity(RSession self, RSecurityAlgorithm secAlgo, RSignatureAlgori
 }
 
 RSessionError
+RSession_setProtocolVersion(RSession self, int version)
+{
+    if ((version != 1) && (version != 2))
+        return R_SESSION_ERROR_SET_FAILED;
+
+    self->protocolVersion = version;
+
+    return R_SESSION_ERROR_OK;
+}
+
+RSessionError
 RSession_setLocalAddress(RSession self, const char* localAddress, int localPort)
 {
     if (self->localAddress)
