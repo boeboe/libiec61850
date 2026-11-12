@@ -108,6 +108,19 @@ LIB61850_API RSessionError
 RSession_setSecurity(RSession self, RSecurityAlgorithm secAlgo, RSignatureAlgorithm sigAlgo);
 
 /**
+ * \brief Enable or disable replay protection of received SPDUs
+ *
+ * When enabled, an authenticated SPDU whose SPDU number is not newer than the
+ * last accepted SPDU number of the same sender (address and port) and key ID
+ * is refused. Up to R_SESSION_REPLAY_SENDERS (default 16) senders are
+ * tracked; a new sender replaces the oldest. Disabled by default.
+ *
+ * \param enable true to refuse replayed SPDUs
+ */
+LIB61850_API void
+RSession_setReplayProtection(RSession self, bool enable);
+
+/**
  * \brief Bind the RSession instance to a specific local IP address and UDP port
  * 
  * \param self the RSession instance
