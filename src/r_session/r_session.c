@@ -1034,20 +1034,46 @@ encodePacket(RSession self, uint8_t payloadType, uint8_t* buffer, int bufPos, RS
     buffer[bufPos++] = 0x01;
     buffer[bufPos++] = 0x40;
 
+    /* the algorithms this SPDU is sent with (see below) */
+    RSecurityAlgorithm secAlgo = (self->protocolVersion == 1) ? self->secAlgo : self->currentSecAlgo;
+    RSignatureAlgorithm sigAlgo = (self->protocolVersion == 1) ? self->sigAlgo : self->currentSigAlgo;
+
+    /* security information: TimeOfCurrentKey, TimeToNextKey, then
+     * version 1: algorithms (2) and key ID; version 2: key ID and IV */
+    int securityInfoLength = 4 + 2 + 4;
+
+    if (self->protocolVersion == 1)
+        securityInfoLength += 2;
+    else
+        securityInfoLength += 1 + ((secAlgo != R_SESSION_SEC_ALGO_NONE) ? 12 : 0);
+
+    int signatureLength = 0;
+
+    if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_80)
+        signatureLength = 2 + 10;
+    else if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_128)
+        signatureLength = 2 + 16;
+    else if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_256)
+        signatureLength = 2 + 32;
+
+    if (secAlgo != R_SESSION_SEC_ALGO_NONE)
+        signatureLength += 2 + 16;
+
     /* SI */
     buffer[bufPos++] = payloadType;
 
-    /* Session header length */
-    buffer[bufPos++] = 24;
+    /* Session header length: the octets that follow, up to the end of the
+     * security information (common session header tag, length and content) */
+    buffer[bufPos++] = (uint8_t) (2 + 10 + securityInfoLength);
 
     /* Common session header tag */
     buffer[bufPos++] = 0x80;
 
-    /* Common session header length */
-    buffer[bufPos++] = 18; // 12
+    /* Common session header length: SPDU length, SPDU number, version */
+    buffer[bufPos++] = 10;
 
-    /* SPDU length */
-    int spduLength = 4 + 2 + 4 + 4 + 1 + 1 + 4 + payloadLength;
+    /* SPDU length: the octets that follow this field to the end of the SPDU */
+    int spduLength = 4 + 2 + securityInfoLength + 4 + payloadLength + signatureLength;
     DEBUG_PRINTF("payloadlength: %i spdu_len: %i", payloadLength, spduLength);
     bufPos = encodeUInt32FixedSize(spduLength, buffer, bufPos);
 
