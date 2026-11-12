@@ -65,15 +65,25 @@ RSessionCrypto_createHMAC(uint8_t* buffer, int bufSize, uint8_t* key, int keySiz
         return false;
     }
 
-    if (mbedtls_md_hmac_finish(&md_ctx, hmac))
+    /* the MAC is truncated to hmacMaxSize octets (HMAC-SHA256-80/128) */
+    uint8_t mac[32];
+
+    if (mbedtls_md_hmac_finish(&md_ctx, mac))
     {
         if (DEBUG_RSESSION_CRYPTO)
             printf("RSESSION_CRYPTO: Failed to finish HMAC\n");
+
+        mbedtls_md_free(&md_ctx);
 
         return false;
     }
 
     mbedtls_md_free(&md_ctx);
+
+    if (hmacMaxSize > 32)
+        hmacMaxSize = 32;
+
+    memcpy(hmac, mac, hmacMaxSize);
 
     return true;
 }
