@@ -41,6 +41,10 @@
 #define DEBUG_PRINTF(...)
 #endif
 
+#ifndef R_SESSION_REPLAY_SENDERS
+#define R_SESSION_REPLAY_SENDERS 16
+#endif
+
 typedef struct sRSessionKeyMaterial* RSessionKeyMaterial;
 
 struct sRSessionKeyMaterial
@@ -87,6 +91,17 @@ struct sRSession
     RSignatureAlgorithm currentSigAlgo;
 
     int timeToNextKey;
+
+    /* replay protection of received SPDUs (RSession_setReplayProtection) */
+    bool replayProtection;
+    char currentSender[128];
+    struct {
+        char sender[128];
+        uint32_t keyId;
+        uint32_t lastSpduNumber;
+        bool used;
+    } replayWindow[R_SESSION_REPLAY_SENDERS];
+    int nextReplayEntry;
 };
 
 #if (DEBUG_RSESSION == 1)
@@ -180,6 +195,14 @@ RSession_setSecurity(RSession self, RSecurityAlgorithm secAlgo, RSignatureAlgori
     self->sigAlgo = sigAlgo;
 
     return R_SESSION_ERROR_OK;
+}
+
+void
+RSession_setReplayProtection(RSession self, bool enable)
+{
+    self->replayProtection = enable;
+    memset(self->replayWindow, 0, sizeof(self->replayWindow));
+    self->nextReplayEntry = 0;
 }
 
 RSessionError
@@ -408,6 +431,48 @@ lookupKey(RSession self, uint32_t keyId, uint8_t** key, int* keySize,  RSecurity
     *keySize = self->currentKeySize;
     *secAlgo = self->currentSecAlgo;
     *sigAlgo = self->currentSigAlgo;
+
+    return true;
+}
+
+/*
+ * Replay check of an authenticated SPDU: refuse an SPDU number that is not
+ * newer than the last accepted one of the same sender and key (serial
+ * number arithmetic, so the 32-bit counter may wrap), then record it.
+ */
+static bool
+checkReplay(RSession self, uint32_t keyId, uint32_t spduNumber)
+{
+    if (self->replayProtection == false)
+        return true;
+
+    int i;
+
+    for (i = 0; i < R_SESSION_REPLAY_SENDERS; i++)
+    {
+        if (self->replayWindow[i].used && (self->replayWindow[i].keyId == keyId) &&
+            (strcmp(self->replayWindow[i].sender, self->currentSender) == 0))
+        {
+            if ((int32_t)(spduNumber - self->replayWindow[i].lastSpduNumber) <= 0)
+            {
+                DEBUG_PRINTF("ERROR - replayed SPDU number %u (last %u)", spduNumber, self->replayWindow[i].lastSpduNumber);
+                return false;
+            }
+
+            self->replayWindow[i].lastSpduNumber = spduNumber;
+
+            return true;
+        }
+    }
+
+    /* a new sender replaces the oldest entry */
+    i = self->nextReplayEntry;
+    self->nextReplayEntry = (self->nextReplayEntry + 1) % R_SESSION_REPLAY_SENDERS;
+
+    StringUtils_copyStringMax(self->replayWindow[i].sender, sizeof(self->replayWindow[i].sender), self->currentSender);
+    self->replayWindow[i].keyId = keyId;
+    self->replayWindow[i].lastSpduNumber = spduNumber;
+    self->replayWindow[i].used = true;
 
     return true;
 }
@@ -642,6 +707,9 @@ parseSessionMessage(RSession self, uint8_t* buffer, int msgSize, RSessionPayload
                 goto exit_error;
             }
         }
+
+        if (checkReplay(self, keyId, spduNumber) == false)
+            goto exit_error;
 
         while ((uint32_t)bufPos < payloadEnd)
         {
@@ -935,6 +1003,9 @@ parseSessionMessage(RSession self, uint8_t* buffer, int msgSize, RSessionPayload
                 goto exit_error;
             }
         }
+
+        if (checkReplay(self, keyId, spduNumber) == false)
+            goto exit_error;
 
         while ((uint32_t)bufPos < payloadEnd)
         {
@@ -1302,6 +1373,8 @@ RSession_receiveMessage(RSession self, RSessionPayloadElementHandler handler, vo
         //TODO use handleset
 
         int msgSize = UdpSocket_receiveFrom(self->socket, ipAddrBuf, 128, self->sendBuffer, self->bufferSize);
+
+        StringUtils_copyStringMax(self->currentSender, sizeof(self->currentSender), ipAddrBuf);
 
         Semaphore_post(self->socketLock);
 
